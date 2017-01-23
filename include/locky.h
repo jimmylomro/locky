@@ -46,7 +46,7 @@ namespace locky{
 	class CV_EXPORTS_W LOCKYFeatureDetector : public cv::Feature2D {
 	public:
 
-		static cv::Ptr<LOCKYFeatureDetector> create(int iter = 100000, int maxExp = 7, int minExp = 3, int thresh = 30);
+		static cv::Ptr<LOCKYFeatureDetector> create(int iter = 100000, int maxExp = 7, int minExp = 3, int thresh = 30, bool bcts = true);
 		
 		virtual void getAccumMat(cv::Mat& toReturn) = 0;
 

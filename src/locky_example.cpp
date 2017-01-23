@@ -43,7 +43,9 @@ int main(int argc, char ** argv) {
 	cv::Mat image = cv::imread("../res/im.jpg");
 	cv::Mat accumMat;
 	std::vector<cv::KeyPoint> keypoints;
-	
+
+
+//--------------- LOCKYS
 	cv::Ptr<locky::LOCKYFeatureDetector> detector = locky::LOCKYFeatureDetector::create();
 	
 	clock_t begin = clock();
@@ -51,17 +53,41 @@ int main(int argc, char ** argv) {
 	clock_t end = clock();
 	
 	double secs = double(end-begin)/CLOCKS_PER_SEC;
-	cout << "Detection time 	 = " << secs << endl;
+	cout << "Detection time BCTS = " << secs << endl;
 	cout << "Number of keypoints = " << keypoints.size() << endl;
 
 	// Draw keypoints on original image and show
-	cv::drawKeypoints( image, keypoints, image);
-	cv::namedWindow("Orig");
-	cv::imshow("Orig", image);
+	cv::Mat lockys;
+	cv::drawKeypoints(image, keypoints, lockys);
+	cv::namedWindow("LOCKYS");
+	cv::imshow("LOCKYS", lockys);
+	
+	detector->getAccumMat(accumMat);
+	cv::namedWindow("BCTS");
+	cv::imshow("BCTS", accumMat);
+	
+//--------------- LOCKY
+	detector = locky::LOCKYFeatureDetector::create(100000,7,3,30,false);
+	
+	begin = clock();
+	detector->detect(image, keypoints);
+	end = clock();
+	
+	secs = double(end-begin)/CLOCKS_PER_SEC;
+	cout << "Detection time BCT  = " << secs << endl;
+	cout << "Number of keypoints = " << keypoints.size() << endl;
+
+	// Draw keypoints on original image and show
+	cv::Mat locky;
+	cv::drawKeypoints(image, keypoints, locky);
+	cv::namedWindow("LOCKY");
+	cv::imshow("LOCKY", locky);
 	
 	detector->getAccumMat(accumMat);
 	cv::namedWindow("BCT");
 	cv::imshow("BCT", accumMat);
+
+
 
 	cv::waitKey(0);
 

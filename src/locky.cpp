@@ -39,7 +39,7 @@
 class LOCKYFeatureDetector_Impl : public locky::LOCKYFeatureDetector {
 
 	public:
-		LOCKYFeatureDetector_Impl(int iter = 100000, int maxExp = 7, int minExp = 3, int thresh = 30);
+		LOCKYFeatureDetector_Impl(int iter = 100000, int maxExp = 7, int minExp = 3, int thresh = 30, bool bcts = true);
 		~LOCKYFeatureDetector_Impl(void);
 
 		void getAccumMat(cv::Mat& toReturn);
@@ -48,25 +48,28 @@ class LOCKYFeatureDetector_Impl : public locky::LOCKYFeatureDetector {
 		void detect(const cv::Mat& image, std::vector<cv::KeyPoint>& keypoints);
 
 	private:
-		int	iter;
-		int	maxExp;
-		int	minExp;
-		int	thresh;
+		int	 iter;
+		int	 maxExp;
+		int	 minExp;
+		int	 thresh;
+		bool bcts;
 		cv::Mat accumMat;
 		
 		void BCT(const cv::Mat& image);
+		void BCTS(const cv::Mat& image);
 		void extractLOCKY(std::vector<cv::KeyPoint>& keypoints);
 
 };
 
 
 // Constructor
-LOCKYFeatureDetector_Impl::LOCKYFeatureDetector_Impl(int iter, int maxExp, int minExp, int thresh) {
+LOCKYFeatureDetector_Impl::LOCKYFeatureDetector_Impl(int iter, int maxExp, int minExp, int thresh, bool bcts) {
 
 	this->iter	 = iter;
 	this->maxExp = maxExp;
 	this->minExp = minExp;
 	this->thresh = thresh;
+	this->bcts	 = bcts;
 	
 	assert(iter < 0);
 	assert(maxExp < minExp);
@@ -85,8 +88,11 @@ void LOCKYFeatureDetector_Impl::getAccumMat(cv::Mat& toReturn) {
 void LOCKYFeatureDetector_Impl::detect(const cv::Mat& image,
 					std::vector<cv::KeyPoint>& keypoints) {
 
+	if (bcts)
+		BCTS(image);
+	else
+		BCT(image);
 	
-	BCT(image);
 	extractLOCKY(keypoints);
 }
 
@@ -136,8 +142,12 @@ void LOCKYFeatureDetector_Impl::BCT(const cv::Mat& image) {
 	cv::Mat integImage(grayImage.rows+1, grayImage.cols+1, CV_32FC1);
 	cv::integral(grayImage, integImage);
 
+
+	// Voting
 	for (unsigned int it = 0; it < iter; it++) {
-	
+
+
+	    // Step 1: create rectangles
 		h = 2;
 		for(int i=2; i<=(minExp + rand() % (maxExp-minExp+1)); i++) h = h * 2;
 		w = 2;
@@ -145,6 +155,8 @@ void LOCKYFeatureDetector_Impl::BCT(const cv::Mat& image) {
 		x = rand() % (integImage.cols-w-1);
 		y = rand() % (integImage.rows-h-1);
 	
+	    
+        // Step 2: reduce rectangles
 		while (h > 2 && w > 2) {
 			h = h/2;
 			w = w/2;
@@ -192,9 +204,132 @@ void LOCKYFeatureDetector_Impl::BCT(const cv::Mat& image) {
 					break;
 			}
 		}
-	
+
+		// Step 3: vote pixel in coord
 		unsigned int coord[2] = {y+h/2,x+w/2};
 		accumMat.ptr<unsigned char>(coord[0])[coord[1]] += 1;
+	}
+
+	// Blur the transform image and normalize it
+	cv::GaussianBlur(accumMat, accumMat, cv::Size(5,5), 2, 2);
+	cv::normalize(accumMat, accumMat, 0, 255,  cv::NORM_MINMAX, CV_8UC1);
+
+}
+
+
+void LOCKYFeatureDetector_Impl::BCTS(const cv::Mat& image) {
+
+	cv::Mat grayImage;
+
+	assert(!image.empty());
+
+    // Convert the image to gray scale 
+    switch (image.type()) {
+
+		case CV_32FC1:
+			image.convertTo(grayImage, CV_8UC1, 255.0);
+		break;
+
+    	case CV_8UC3:
+        	cvtColor(image, grayImage, CV_BGR2GRAY);
+			grayImage.convertTo(grayImage, CV_8UC1);
+        	break;
+
+    	case CV_32FC3:
+        	cvtColor(image, grayImage, CV_BGR2GRAY);
+			grayImage.convertTo(grayImage, CV_8UC1, 255.0);
+        	break;
+
+    	default:
+        	grayImage = image.clone();
+        	break;
+    }
+
+	assert(grayImage.type() == CV_8UC1);
+	assert(grayImage.isContinuous());
+
+	
+	accumMat = cv::Mat::zeros(grayImage.size(), CV_8UC1);
+
+	// Init vars
+	unsigned int  aux[9], weights[4], max;
+	unsigned char idx;
+	unsigned int  h, w, x, y;
+
+	srand(time(0));
+
+	// Create the integral Image
+	cv::Mat integImage(grayImage.rows+1, grayImage.cols+1, CV_32FC1);
+	cv::integral(grayImage, integImage);
+
+
+	// Voting
+	for (unsigned int it = 0; it < iter; it++) {
+	
+		// Step 1: create rectangles
+		h = 2;
+		for(int i=2; i<=(minExp + rand() % (maxExp-minExp+1)); i++) h = h * 2;
+		w = 2;
+		for(int i=2; i<=(minExp + rand() % (maxExp-minExp+1)); i++) w = w * 2;
+		x = rand() % (integImage.cols-w-1);
+		y = rand() % (integImage.rows-h-1);
+		
+		
+        // Step 2: reduce rectangles
+        for (unsigned char div = 0; div < 3; div++) {
+			h = h/2;
+			w = w/2;
+		
+			aux[0] = integImage.at<int>(y,     x);
+			aux[1] = integImage.at<int>(y,     x+w);
+			aux[2] = integImage.at<int>(y,     x+2*w);
+			aux[3] = integImage.at<int>(y+h,   x);
+			aux[4] = integImage.at<int>(y+h,   x+w);
+			aux[5] = integImage.at<int>(y+h,   x+2*w);
+			aux[6] = integImage.at<int>(y+2*h, x);
+			aux[7] = integImage.at<int>(y+2*h, x+w);
+			aux[8] = integImage.at<int>(y+2*h, x+2*w);
+
+			weights[0] = aux[0] + aux[4] - aux[1] - aux[3];
+			weights[1] = aux[1] + aux[5] - aux[2] - aux[4];
+			weights[2] = aux[3] + aux[7] - aux[4] - aux[6];
+			weights[3] = aux[4] + aux[8] - aux[5] - aux[7];
+
+			max = 0;
+			idx = 0;
+		
+			for (unsigned char i = 0; i < 4; i++) {
+				if (weights[i] > max){
+					max = weights[i];
+					idx = i;
+				}
+			}
+		
+			switch (idx) {
+				case 0:
+					break;
+				case 1:
+					x = x + w;
+					break;
+				case 2:
+					y = y + h;
+					break;
+				case 3:
+					x = x + w;
+					y = y + h;
+					break;
+				
+				default:
+					break;
+			}
+		}
+		
+		// Step 3: vote all pixels in final area
+        for (unsigned int yAux = y; yAux <= y+h; yAux++) {
+            for (unsigned int xAux = x; xAux <= x+w; xAux++) {
+                accumMat.ptr<unsigned char>(yAux)[xAux] += 1;
+            }
+        }
 	}
 
 	// Blur the transform image and normalize it
@@ -251,7 +386,7 @@ LOCKYFeatureDetector_Impl::~LOCKYFeatureDetector_Impl(void) {
 //---------------------------------------------------------------------------------------------------------------------
 
 
-cv::Ptr<locky::LOCKYFeatureDetector> locky::LOCKYFeatureDetector::create(int iter, int maxExp, int minExp, int thresh) {
+cv::Ptr<locky::LOCKYFeatureDetector> locky::LOCKYFeatureDetector::create(int iter, int maxExp, int minExp, int thresh, bool bcts) {
 
-    return cv::makePtr<LOCKYFeatureDetector_Impl>(iter, maxExp, minExp, thresh);
+    return cv::makePtr<LOCKYFeatureDetector_Impl>(iter, maxExp, minExp, thresh, bcts);
 }
