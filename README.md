@@ -28,6 +28,8 @@ If the compilation goes well, directories with binaries and static link librarie
 
 This code has only been tested in OSX 10.11
 
+Credits for the image im.jpg to Juan Romano
+
 [1]: http://link.springer.com/chapter/10.1007/978-3-319-23192-1_30
 [2]: http://link.springer.com/article/10.1007/s00138-016-0785-3
 
