@@ -356,7 +356,7 @@ void LOCKYFeatureDetector_Impl::extractLOCKY(std::vector<cv::KeyPoint>& keypoint
         
         float x = acumX/(citer->size());
         float y = acumY/(citer->size());
-        float s = contourArea(*citer, false);
+        float s = sqrt(contourArea(*citer, false));
         
         keypoints.push_back(cv::KeyPoint(x,y,s));
         
